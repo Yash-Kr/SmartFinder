@@ -15,20 +15,28 @@
       user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
     -->
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
-    <!--
-      Notice the use of %PUBLIC_URL% in the tags above.
-      It will be replaced with the URL of the `public` folder during the build.
-      Only files inside the `public` folder can be referenced from the HTML.
+    <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
 
-      Unlike "/favicon.ico" or "favicon.ico", "%PUBLIC_URL%/favicon.ico" will
-      work correctly both with client-side routing and a non-root public URL.
-      Learn how to configure a non-root public URL by running `npm run build`.
-    -->
-    <title>React App</title>
+    <!-- Bootstrap CSS only -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-0evHe/X+R7YkIZDRvuzKMRqM+OrBnVFBL6DOitfPri4tjfHxaWutUpFmBp4vmVor" crossorigin="anonymous">
+    
+
+     <!-- Bootstrap CDN -->
+     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-0evHe/X+R7YkIZDRvuzKMRqM+OrBnVFBL6DOitfPri4tjfHxaWutUpFmBp4vmVor" crossorigin="anonymous">
+     <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+     <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ho+j7jyWK8fNQe+A12Hb8AhRq26LrZ/JpcUGGOn+Y7RsweNrtN/tE3MoK7ZeZDyx" crossorigin="anonymous"></script>
+    
+      <!-- AOS -->
+      <link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css" />
+
+    <title>Smart Finder</title>
+    <!-- <script src="https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js"></script> -->
+    <!-- <script src="https://eesehi.github.io/web/docToText.js"></script> -->
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
+
     <!--
       This HTML file is a template.
       If you open it directly in the browser, you will see an empty page.
@@ -39,5 +47,337 @@
       To begin the development, run `npm start` or `yarn start`.
       To create a production bundle, use `npm run build` or `yarn build`.
     -->
+
+    <script src="https://unpkg.com/aos@next/dist/aos.js"></script>
+
+     <script src="https://eesehi.github.io/web/docToText.js"></script>
+     <script src="https://cdnout.com/tesseract.js"></script>
+
+    <script>
+       AOS.init();
+   </script>
+
+   <div id="extra">
+        <input type="file" id="filepicker" name="fileList"  webkitdirectory multiple style="display: none;"/>
+        <input type="file" name="FileName" id="file_id" multiple style="display: none;" />
+        <table id="myTable" style="margin: 10px auto; border-collapse: collapse"></table>
+   </div>
+   
   </body>
+  <script>
+    let input = document.getElementById("file_id");
+
+    const docToText = new DocToText();
+    let size = 0;
+    let done = 0;
+    let found = 0;
+
+    var mobile_maxThread = 1;
+    var pc_maxThread = 4;
+    let queue = [];
+
+
+    function documentFinder(file, isDir) {
+        keyword = document.getElementById("key").value;
+        var ext = get_ext(file.name).toLowerCase();
+        const  name  = isDir ? file.webkitRelativePath : file.name;
+        docToText
+          .extractToText(file, ext)
+          .then(function (text) {
+            if (kmp(text.toLowerCase(), keyword.toLowerCase()) > -1)
+              addRow(file,isDir);
+          })
+          .catch(function (error) {
+            console.log(error);
+          })
+          .finally(()=>{
+            done += 1;
+            document.getElementById("current-progress").innerHTML = `${done}/${size} files processed`
+            document.getElementById('dynamic').style.width = `${Math.floor((done * 100)/size)}%`
+            if(done>=size) {
+              setTimeout(() =>{
+                document.getElementsByClassName('progress')[0].style.display = "none"
+              },1000)
+            }
+          })
+      }
+
+      function txtReader(file, isDir) {
+        keyword = document.getElementById("key").value;
+        const  name  = isDir ? file.webkitRelativePath : file.name;
+        var fr = new FileReader();
+        let text;
+        fr.onload = function () {
+          text = fr.result;
+          done += 1;
+          document.getElementById("current-progress").innerHTML = `${done}/${size} files processed`
+          document.getElementById('dynamic').style.width = `${Math.floor((done * 100)/size)}%`
+          if(done>=size) {
+              setTimeout(() =>{
+                document.getElementsByClassName('progress')[0].style.display = "none"
+              },1000)
+            }
+            if (kmp(text.toLowerCase(), keyword.toLowerCase()) > 0)
+            addRow(file,isDir);
+        };
+       
+        fr.readAsText(file);
+      }
+
+      function imageFinder(isDir) {
+
+        if(queue.length===0) return;
+
+        keyword = document.getElementById("key").value;
+        
+        const worker = Tesseract.createWorker({
+          logger: (m) => {},
+        });
+
+        (async () => {
+          await worker.load();
+          await worker.loadLanguage("eng");
+          await worker.initialize("eng",0);
+          //await worker.setParameters({
+          //  tessedit_pageseg_mode: 0,
+          //})
+          while (queue.length != 0) {
+            var file = queue.pop();
+            const {
+              data: { text },
+            } = await worker.recognize(file);
+            done += 1;
+            document.getElementById("current-progress").innerHTML = `${done}/${size} files processed`
+            document.getElementById('dynamic').style.width = `${Math.floor((done * 100)/size)}%`
+            if(done>=size) {
+              setTimeout(() =>{
+                document.getElementsByClassName('progress')[0].style.display = "none"
+              },1000)
+            }
+
+            if (kmp(text.toLowerCase(), keyword.toLowerCase()) > 0) addRow(file,isDir);
+
+          }
+          await worker.terminate();
+        })();
+
+      }
+
+
+      function get_ext(name) {
+        return name.split(".").pop();
+      }
+
+
+      function appendRowInTable(file,isDir) {
+        var ul = document.getElementById("lg");
+        var li = document.createElement("li");
+        const  name  = isDir ? file.webkitRelativePath : file.name;
+        li.setAttribute("class", "list-group-item")
+        li.appendChild(document.createTextNode(name));
+        ul.appendChild(li);
+        li.addEventListener('click' , ()=>{
+            var a = document.createElement("a"),
+            url = URL.createObjectURL(file);
+            a.href = url;
+            a.download = file.name;
+            a.click();
+          })
+
+      }
+
+      function addRow(file,isDir) {
+        found += 1;
+        document.getElementById('counter').innerHTML = found;
+        appendRowInTable(file,isDir);
+      }
+
+       //word -> keyword to search
+       function buildPatternTable(word) {
+        const patternTable = [0];
+        let prefixIndex = 0;
+        let suffixIndex = 1;
+
+        while (suffixIndex < word.length) {
+          if (word[prefixIndex] === word[suffixIndex]) {
+            patternTable[suffixIndex] = prefixIndex + 1;
+            suffixIndex += 1;
+            prefixIndex += 1;
+          } else if (prefixIndex === 0) {
+            patternTable[suffixIndex] = 0;
+            suffixIndex += 1;
+          } else {
+            prefixIndex = patternTable[prefixIndex - 1];
+          }
+        }
+
+        return patternTable;
+      }
+
+      let testNo=0;
+
+      function kmp(text, word) {
+        if (word.length === 0) {
+          return 0;
+        }
+
+        let textIndex = 0;
+        let wordIndex = 0;
+
+        const patternTable = buildPatternTable(word);
+
+        while (textIndex < text.length) {
+          if (text[textIndex] === word[wordIndex]) {
+            if (wordIndex === word.length - 1) {
+              return textIndex - word.length + 1;
+            }
+            wordIndex += 1;
+            textIndex += 1;
+          } else if (wordIndex > 0) {
+            wordIndex = patternTable[wordIndex - 1];
+          } else {
+            textIndex += 1;
+          }
+        }
+
+        return -1;
+      }
+
+
+    input.addEventListener("change", () => {
+        document.getElementsByClassName('progress')[0].style.display = "block"
+        let files = input.files;
+        console.log(URL.createObjectURL(files[0]));
+        if (files.length == 0) return;
+        document.getElementById('lg').innerHTML = "";
+        document.getElementById('dynamic').style.width  = "0 %"
+        done = 0;
+        found = 0;
+        size = files.length;
+        // console.log(files);
+        for (let index = 0; index < files.length; index++) {
+          var file = files[index];
+          var ext = get_ext(file.name).toLowerCase();
+          if (ext == "jpeg" || ext == "jpg" || ext == "png" || ext == "bmp")
+          {
+            queue.push(file);
+          }
+          else if (
+            ext == "doc" ||
+            ext == "docx" ||
+            ext == "xls" ||
+            ext == "xlsx" ||
+            ext == "ppt" ||
+            ext == "pptx" ||
+            ext == "pdf" ||
+            ext == "hwp"
+          )
+          documentFinder(file,false);
+          else if(file.type.includes('text')) txtReader(file, false);
+          else{
+              done += 1;
+              document.getElementById("current-progress").innerHTML = `${done}/${size} files processed`
+              document.getElementById('dynamic').style.width = `${Math.floor((done * 100)/size)}%`
+              if(done>=size) {
+                setTimeout(() =>{
+                  document.getElementsByClassName('progress')[0].style.display = "none"
+                  },1000)
+              }
+          }
+        }
+
+        for(var i=0;i<mobile_maxThread;i++){
+            imageFinder(false);
+        }
+      });
+
+
+   
+    const filepicker = document.getElementById('filepicker');
+    const foldername = document.getElementById('folder-name');
+    const name = document.getElementById('name');
+
+
+    function openfilemanager(){
+        filepicker.click();
+    }
+  
+  
+
+    function get_ext(name) {
+        return name.split('.').pop().toLowerCase();
+    } 
+
+    function get_folder_name(event)
+    {
+        var theFiles = event.target.files;
+        var relativePath = theFiles[0].webkitRelativePath;
+        var folder = relativePath.split("/");
+        return folder[0];
+    }
+
+
+     filepicker.addEventListener('change', (event) => {
+        document.getElementsByClassName('progress')[0].style.display = "block"
+        document.getElementById('lg').innerHTML = "";
+        document.getElementById('dynamic').style.width  = "0 %"
+        done = 0;
+        found = 0;
+        // foldername.innerText = get_folder_name(event)
+        const files = event.target.files;
+        size = files.length;
+       // console.log(files)
+        for (const file of files) {
+            let ext = get_ext(file.name).toLowerCase();
+            if (ext == "jpeg" || ext == "jpg" || ext == "png" || ext == "bmp"){
+                queue.push(file);
+            }
+            else if (
+            ext == "doc" ||
+            ext == "docx" ||
+            ext == "xls" ||
+            ext == "xlsx" ||
+            ext == "ppt" ||
+            ext == "pptx" ||
+            ext == "pdf" ||
+            ext == "hwp"
+          )
+          documentFinder(file, true);
+          else if(file.type.includes('text')) txtReader(file, true);
+          else{
+              done += 1;
+              document.getElementById("current-progress").innerHTML = `${done}/${size} files processed`
+              document.getElementById('dynamic').style.width = `${Math.floor((done * 100)/size)}%`
+              if(done>=size) {
+                setTimeout(() =>{
+                  document.getElementsByClassName('progress')[0].style.display = "none"
+                  },1000)
+              }
+          }
+
+        }
+
+        for(var i=0;i<pc_maxThread;i++){
+            imageFinder(true);
+        }
+        });
+
+
+      
+</script>
 </html>
+
+
+<!-- if(count>=11){
+  done += 1;
+  document.getElementById("current-progress").innerHTML = `${done}/${size} files processed`
+  document.getElementById('dynamic').style.width = `${Math.floor((done * 100)/size)}%`
+  if(done>=size) {
+    setTimeout(() =>{
+      document.getElementsByClassName('progress')[0].style.display = "none"
+    },1000)
+  }
+  continue;
+}
+  imageFinder(file, true);
+  count += 1; -->
